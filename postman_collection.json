@@ -1,0 +1,285 @@
+{
+  "info": {
+    "name": "Multi-Tenant Billing Platform",
+    "description": "API endpoints for the multi-tenant B2B SaaS billing platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "api_key_test_public",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "api_key_live_public",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jwt_access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jwt_refresh_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register Tenant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('api_key_test_public', response.tenant.api_key_test_public);",
+                  "    pm.collectionVariables.set('api_key_live_public', response.tenant.api_key_public);",
+                  "    pm.collectionVariables.set('jwt_access_token', response.tokens.access);",
+                  "    pm.collectionVariables.set('jwt_refresh_token', response.tokens.refresh);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"Example Corp\",\n  \"email\": \"owner@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Doe\",\n  \"domain\": \"example.com\",\n  \"webhook_url\": \"https://example.com/webhooks/billing\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/tenants/register/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "tenants", "register", ""]
+            },
+            "description": "Register a new tenant and create owner user. Returns all API keys and JWT tokens."
+          }
+        },
+        {
+          "name": "Login Tenant User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('jwt_access_token', response.tokens.access);",
+                  "    pm.collectionVariables.set('jwt_refresh_token', response.tokens.refresh);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner@example.com\",\n  \"password\": \"SecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/tenants/login/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "tenants", "login", ""]
+            },
+            "description": "Login with email and password to get JWT tokens for dashboard access."
+          }
+        },
+        {
+          "name": "Verify API Key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key_test_public}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/tenants/verify/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "tenants", "verify", ""]
+            },
+            "description": "Verify that an API key is valid and get tenant information."
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/tenants/me/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "tenants", "me", ""]
+            },
+            "description": "Get current authenticated user details using JWT token."
+          }
+        },
+        {
+          "name": "Get Tenant Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key_test_public}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/tenants/details/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "tenants", "details", ""]
+            },
+            "description": "Get tenant details using API key (alternative to Authorization header)."
+          }
+        },
+        {
+          "name": "Refresh JWT Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('jwt_access_token', response.access);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{jwt_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/tenants/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "tenants", "token", "refresh", ""]
+            },
+            "description": "Refresh expired JWT access token using refresh token."
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"SecurePassword123!\",\n  \"new_password\": \"NewSecurePassword456!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/tenants/change-password/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "tenants", "change-password", ""]
+            },
+            "description": "Change password for authenticated user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Billing (Coming Soon)",
+      "item": [
+        {
+          "name": "List Billing Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key_test_public}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/billing/plans/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "billing", "plans", ""]
+            },
+            "description": "List all billing plans for the authenticated tenant."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions (Coming Soon)",
+      "item": [
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key_test_public}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/subscriptions/customers/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "subscriptions", "customers", ""]
+            },
+            "description": "List all customers for the authenticated tenant."
+          }
+        }
+      ]
+    }
+  ]
+}

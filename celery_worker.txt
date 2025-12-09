@@ -1,0 +1,5 @@
+# Celery worker startup script
+# Run with: celery -A config worker --loglevel=info
+
+# For Windows development, use:
+# celery -A config worker --pool=solo --loglevel=info

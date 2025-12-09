@@ -1,0 +1,44 @@
+# Django Core
+Django>=4.2,<5.0
+djangorestframework>=3.14.0
+django-cors-headers>=4.3.0
+django-filter>=23.5
+
+# Database
+psycopg2-binary>=2.9.9
+dj-database-url>=2.1.0
+
+# Authentication
+djangorestframework-simplejwt>=5.3.0
+PyJWT>=2.8.0
+
+# Celery & Redis
+celery>=5.3.4
+redis>=5.0.1
+django-celery-beat>=2.5.0
+django-celery-results>=2.5.1
+
+# Stripe
+stripe>=7.7.0
+
+# Security & Validation
+django-environ>=0.11.2
+cryptography>=41.0.7
+
+# Utilities
+python-slugify>=8.0.1
+python-dateutil>=2.8.2
+requests>=2.31.0
+
+# Development
+django-extensions>=3.2.3
+ipython>=8.18.1
+
+# Testing
+pytest>=7.4.3
+pytest-django>=4.7.0
+factory-boy>=3.3.0
+
+# Production
+gunicorn>=21.2.0
+whitenoise>=6.6.0
