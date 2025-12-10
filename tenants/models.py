@@ -439,3 +439,261 @@ class TenantPlan(TimeStampedModel):
                 'description': self.description or '',
             },
         }
+
+
+class TenantCustomer(TimeStampedModel):
+    """
+    Represents a customer of a tenant (end-user/company subscribing to tenant's service).
+    Each tenant customer has a corresponding Stripe customer in the tenant's Stripe account.
+    """
+    # Relationships
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='customers',
+        db_index=True,
+        help_text="The tenant this customer belongs to"
+    )
+    
+    # Basic Information
+    email = models.EmailField(
+        db_index=True,
+        help_text="Customer's email address"
+    )
+    full_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Customer's full name"
+    )
+    phone = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Customer's phone number"
+    )
+    
+    # Stripe Integration
+    stripe_customer_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Stripe customer ID in tenant's connected account"
+    )
+    
+    # Address Information
+    country = models.CharField(
+        max_length=2,
+        blank=True,
+        null=True,
+        help_text="ISO 3166-1 alpha-2 country code"
+    )
+    city = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="City name"
+    )
+    postal_code = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Postal/ZIP code"
+    )
+    
+    # Marketing Attribution
+    utm_source = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="UTM source parameter"
+    )
+    utm_medium = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="UTM medium parameter"
+    )
+    utm_campaign = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="UTM campaign parameter"
+    )
+    
+    # Metadata
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional metadata for the customer"
+    )
+    
+    class Meta:
+        db_table = 'tenant_customers'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'email']),
+            models.Index(fields=['tenant', 'created_at']),
+            models.Index(fields=['stripe_customer_id']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'email'],
+                name='unique_customer_email_per_tenant'
+            ),
+        ]
+    
+    def __str__(self):
+        return f"{self.email} - {self.tenant.company_name}"
+
+
+class TenantSubscription(TimeStampedModel):
+    """
+    Represents a subscription from a tenant's customer to one of the tenant's plans.
+    Synced with Stripe subscriptions in the tenant's connected account.
+    """
+    SUBSCRIPTION_STATUS_CHOICES = [
+        ('incomplete', 'Incomplete'),           # Checkout not completed
+        ('incomplete_expired', 'Incomplete Expired'),  # Checkout expired
+        ('trialing', 'Trialing'),              # In trial period
+        ('active', 'Active'),                  # Active and paid
+        ('past_due', 'Past Due'),             # Payment failed
+        ('canceled', 'Canceled'),             # Canceled
+        ('unpaid', 'Unpaid'),                 # Payment attempts exhausted
+    ]
+    
+    # Relationships
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='subscriptions',
+        db_index=True,
+        help_text="The tenant this subscription belongs to"
+    )
+    customer = models.ForeignKey(
+        TenantCustomer,
+        on_delete=models.CASCADE,
+        related_name='subscriptions',
+        db_index=True,
+        help_text="The customer who owns this subscription"
+    )
+    plan = models.ForeignKey(
+        TenantPlan,
+        on_delete=models.PROTECT,
+        related_name='subscriptions',
+        db_index=True,
+        help_text="The plan this subscription is for"
+    )
+    
+    # Stripe Integration
+    stripe_subscription_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=True,
+        help_text="Stripe subscription ID"
+    )
+    stripe_checkout_session_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Stripe Checkout Session ID used to create this subscription"
+    )
+    
+    # Status
+    status = models.CharField(
+        max_length=20,
+        choices=SUBSCRIPTION_STATUS_CHOICES,
+        default='incomplete',
+        db_index=True,
+        help_text="Current subscription status"
+    )
+    
+    # Billing Periods
+    current_period_start = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Start of the current billing period"
+    )
+    current_period_end = models.DateTimeField(
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="End of the current billing period"
+    )
+    
+    # Trial Period
+    trial_start = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Start of the trial period"
+    )
+    trial_end = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="End of the trial period"
+    )
+    
+    # Cancellation
+    cancel_at_period_end = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether subscription will be canceled at period end"
+    )
+    canceled_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the subscription was canceled"
+    )
+    cancellation_reason = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Reason for cancellation"
+    )
+    
+    # Quantity (for per-seat pricing)
+    quantity = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Number of seats/units for this subscription"
+    )
+    
+    # Metadata
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional metadata for the subscription"
+    )
+    
+    class Meta:
+        db_table = 'tenant_subscriptions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['customer', 'status']),
+            models.Index(fields=['plan', 'status']),
+            models.Index(fields=['tenant', 'current_period_end']),
+            models.Index(fields=['status', 'cancel_at_period_end']),
+        ]
+    
+    def __str__(self):
+        return f"{self.customer.email} - {self.plan.name} ({self.status})"
+    
+    @property
+    def is_active(self):
+        """Check if subscription is currently active."""
+        return self.status in ['active', 'trialing']
+    
+    @property
+    def total_amount(self):
+        """Calculate total subscription amount."""
+        return self.plan.price_cents * self.quantity
+    
+    def calculate_platform_fee(self):
+        """Calculate platform fee based on tenant's fee percentage."""
+        total = self.total_amount
+        fee_percentage = self.tenant.platform_fee_percentage
+        return int(total * (fee_percentage / 100))

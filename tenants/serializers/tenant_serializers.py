@@ -3,7 +3,7 @@ Serializers for tenant and tenant user models.
 """
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from .models import Tenant, TenantUser, TenantPlan
+from tenants.models import Tenant, TenantUser, TenantPlan
 
 
 class TenantRegistrationSerializer(serializers.Serializer):

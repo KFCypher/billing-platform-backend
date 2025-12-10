@@ -4,7 +4,14 @@ URL patterns for tenant authentication and management.
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
-from .view_modules import stripe_views, apikey_views, webhook_views, plan_views
+from .view_modules import (
+    stripe_views,
+    apikey_views,
+    webhook_views,
+    plan_views,
+    customer_views,
+    subscription_views,
+)
 
 app_name = 'tenants'
 
@@ -41,4 +48,18 @@ urlpatterns = [
     path('plans/', plan_views.plans_list_create, name='plans'),  # GET (list) / POST (create)
     path('plans/<int:plan_id>/', plan_views.plan_detail, name='plan_detail'),  # GET / PATCH / DELETE
     path('plans/<int:plan_id>/duplicate/', plan_views.duplicate_plan, name='duplicate_plan'),  # POST
+    
+    # Customers
+    path('customers/', customer_views.list_customers, name='list_customers'),  # GET (list)
+    path('customers/create/', customer_views.create_customer, name='create_customer'),  # POST
+    path('customers/<int:customer_id>/', customer_views.get_customer, name='get_customer'),  # GET
+    path('customers/<int:customer_id>/update/', customer_views.update_customer, name='update_customer'),  # PATCH
+    
+    # Subscriptions
+    path('subscriptions/', subscription_views.list_subscriptions, name='list_subscriptions'),  # GET (list)
+    path('subscriptions/create/', subscription_views.create_subscription, name='create_subscription'),  # POST
+    path('subscriptions/<int:subscription_id>/', subscription_views.get_subscription, name='get_subscription'),  # GET
+    path('subscriptions/<int:subscription_id>/update/', subscription_views.update_subscription, name='update_subscription'),  # PATCH
+    path('subscriptions/<int:subscription_id>/cancel/', subscription_views.cancel_subscription, name='cancel_subscription'),  # POST
+    path('subscriptions/<int:subscription_id>/reactivate/', subscription_views.reactivate_subscription, name='reactivate_subscription'),  # POST
 ]

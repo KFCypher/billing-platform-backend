@@ -9,11 +9,11 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from ..models import TenantPlan
 from ..serializers import (
-    TenantPlanSerializer, 
-    TenantPlanCreateSerializer, 
-    TenantPlanUpdateSerializer, 
-    TenantPlanDuplicateSerializer
+    TenantPlanSerializer,
+    CreateTenantPlanSerializer,
+    UpdateTenantPlanSerializer,
 )
+from ..serializers.tenant_serializers import TenantPlanDuplicateSerializer
 from ..permissions import IsTenantAdmin
 from ..authentication import TenantAPIKeyAuthentication
 
@@ -42,7 +42,7 @@ def create_plan_handler(request):
     """Create a new subscription plan."""
     try:
         tenant = request.user.tenant
-        serializer = TenantPlanCreateSerializer(data=request.data)
+        serializer = CreateTenantPlanSerializer(data=request.data)
         
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -199,7 +199,7 @@ def update_plan_handler(request, plan_id):
         tenant = request.user.tenant
         plan = TenantPlan.objects.get(id=plan_id, tenant=tenant)
         
-        serializer = TenantPlanUpdateSerializer(plan, data=request.data, partial=True)
+        serializer = UpdateTenantPlanSerializer(plan, data=request.data, partial=True)
         
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
