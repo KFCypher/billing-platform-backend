@@ -86,6 +86,37 @@ class Tenant(TimeStampedModel):
         help_text="Platform fee percentage (0-100)"
     )
     
+    # Mobile Money Integration
+    momo_merchant_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="MTN Mobile Money merchant ID"
+    )
+    momo_api_key = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Encrypted MTN Mobile Money API key"
+    )
+    momo_enabled = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether Mobile Money payments are enabled for this tenant"
+    )
+    momo_provider = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="MoMo provider: mtn, vodafone, airteltigo"
+    )
+    momo_sandbox_mode = models.BooleanField(
+        default=True,
+        help_text="Whether to use Mobile Money sandbox environment"
+    )
+    
     # Webhooks
     webhook_url = models.URLField(
         max_length=500,

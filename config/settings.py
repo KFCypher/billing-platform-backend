@@ -222,6 +222,9 @@ PLATFORM_FEE_PERCENTAGE = env.float('PLATFORM_FEE_PERCENTAGE', default=15.0)
 PLATFORM_NAME = env('PLATFORM_NAME', default='BillingPlatform')
 PLATFORM_DOMAIN = env('PLATFORM_DOMAIN', default='localhost:8000')
 
+# Mobile Money Settings
+MOMO_CALLBACK_HOST = env('MOMO_CALLBACK_HOST', default='https://yourdomain.com')
+
 # Email Configuration
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = env('EMAIL_HOST', default='smtp.gmail.com')
