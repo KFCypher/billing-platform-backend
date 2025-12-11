@@ -697,3 +697,323 @@ class TenantSubscription(TimeStampedModel):
         total = self.total_amount
         fee_percentage = self.tenant.platform_fee_percentage
         return int(total * (fee_percentage / 100))
+
+
+class TenantPayment(TimeStampedModel):
+    """
+    Represents a payment from a tenant's customer.
+    Tracks payments from multiple providers (Stripe, Mobile Money, manual).
+    """
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+        ('canceled', 'Canceled'),
+        ('refunded', 'Refunded'),
+        ('partially_refunded', 'Partially Refunded'),
+    ]
+    
+    PAYMENT_PROVIDER_CHOICES = [
+        ('stripe', 'Stripe'),
+        ('momo', 'Mobile Money'),
+        ('manual', 'Manual'),
+    ]
+    
+    # Relationships
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='payments',
+        db_index=True,
+        help_text="The tenant this payment belongs to"
+    )
+    customer = models.ForeignKey(
+        TenantCustomer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payments',
+        db_index=True,
+        help_text="The customer who made this payment"
+    )
+    subscription = models.ForeignKey(
+        TenantSubscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payments',
+        db_index=True,
+        help_text="The subscription this payment is for (if applicable)"
+    )
+    
+    # Payment Details
+    amount_cents = models.IntegerField(
+        help_text="Payment amount in cents"
+    )
+    currency = models.CharField(
+        max_length=3,
+        default='USD',
+        help_text="ISO 4217 currency code"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+        help_text="Current payment status"
+    )
+    
+    # Provider Information
+    provider = models.CharField(
+        max_length=20,
+        choices=PAYMENT_PROVIDER_CHOICES,
+        default='stripe',
+        db_index=True,
+        help_text="Payment provider"
+    )
+    provider_payment_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Payment ID from the provider (e.g., Stripe payment intent ID)"
+    )
+    
+    # Platform Fee Calculation
+    platform_fee_cents = models.IntegerField(
+        default=0,
+        help_text="Platform fee amount in cents"
+    )
+    tenant_net_amount_cents = models.IntegerField(
+        help_text="Net amount received by tenant after platform fee (in cents)"
+    )
+    
+    # Failure Information
+    failure_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Error code from payment provider"
+    )
+    failure_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Error message from payment provider"
+    )
+    retry_count = models.IntegerField(
+        default=0,
+        help_text="Number of retry attempts"
+    )
+    
+    # Receipt and Invoice
+    invoice_pdf_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="URL to invoice PDF"
+    )
+    receipt_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="URL to payment receipt"
+    )
+    
+    # Metadata
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional payment metadata"
+    )
+    
+    class Meta:
+        db_table = 'tenant_payments'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['customer', 'status']),
+            models.Index(fields=['subscription', 'created_at']),
+            models.Index(fields=['provider', 'provider_payment_id']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['provider', 'provider_payment_id'],
+                name='unique_provider_payment',
+                condition=models.Q(provider_payment_id__isnull=False)
+            ),
+        ]
+    
+    def __str__(self):
+        amount = self.amount_cents / 100
+        return f"{self.currency} {amount:.2f} - {self.status} ({self.provider})"
+    
+    def save(self, *args, **kwargs):
+        """Calculate tenant net amount before saving."""
+        if not self.tenant_net_amount_cents:
+            self.tenant_net_amount_cents = self.amount_cents - self.platform_fee_cents
+        super().save(*args, **kwargs)
+
+
+class TenantWebhookEvent(TimeStampedModel):
+    """
+    Represents an outgoing webhook event to be sent to a tenant.
+    Tracks delivery status and retry attempts.
+    """
+    EVENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sending', 'Sending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+    
+    # Relationships
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='outgoing_webhook_events',
+        db_index=True,
+        help_text="The tenant to send this webhook to"
+    )
+    
+    # Event Details
+    event_type = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text="Type of webhook event (e.g., subscription.created)"
+    )
+    payload_json = models.JSONField(
+        help_text="Full event payload to send"
+    )
+    
+    # Delivery Status
+    status = models.CharField(
+        max_length=20,
+        choices=EVENT_STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+        help_text="Current delivery status"
+    )
+    attempts = models.IntegerField(
+        default=0,
+        help_text="Number of delivery attempts"
+    )
+    response_code = models.IntegerField(
+        blank=True,
+        null=True,
+        help_text="HTTP response code from last delivery attempt"
+    )
+    response_body = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Response body from last delivery attempt"
+    )
+    
+    # Timestamps
+    sent_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the webhook was first sent"
+    )
+    succeeded_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="When the webhook was successfully delivered"
+    )
+    
+    # Idempotency
+    idempotency_key = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+        help_text="Unique key to prevent duplicate event processing"
+    )
+    
+    class Meta:
+        db_table = 'tenant_webhook_events'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['event_type', 'created_at']),
+            models.Index(fields=['status', 'attempts']),
+            models.Index(fields=['tenant', 'event_type', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.event_type} - {self.tenant.company_name} ({self.status})"
+
+
+class TenantWebhookLog(TimeStampedModel):
+    """
+    Detailed log of each webhook delivery attempt for debugging.
+    """
+    # Relationships
+    webhook_event = models.ForeignKey(
+        TenantWebhookEvent,
+        on_delete=models.CASCADE,
+        related_name='logs',
+        db_index=True,
+        help_text="The webhook event this log is for"
+    )
+    
+    # Attempt Details
+    attempt_number = models.IntegerField(
+        help_text="Which attempt this log represents (1, 2, 3, etc.)"
+    )
+    
+    # Request Details
+    request_url = models.URLField(
+        max_length=500,
+        help_text="URL the webhook was sent to"
+    )
+    request_headers = models.JSONField(
+        default=dict,
+        help_text="Request headers sent"
+    )
+    request_body = models.JSONField(
+        help_text="Request body sent"
+    )
+    
+    # Response Details
+    response_code = models.IntegerField(
+        blank=True,
+        null=True,
+        help_text="HTTP response code"
+    )
+    response_headers = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Response headers received"
+    )
+    response_body = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Response body received"
+    )
+    
+    # Error Information
+    error_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Error message if request failed"
+    )
+    
+    # Timing
+    duration_ms = models.IntegerField(
+        blank=True,
+        null=True,
+        help_text="Request duration in milliseconds"
+    )
+    
+    class Meta:
+        db_table = 'tenant_webhook_logs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['webhook_event', 'attempt_number']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Attempt {self.attempt_number} - {self.webhook_event.event_type}"

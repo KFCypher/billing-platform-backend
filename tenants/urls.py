@@ -11,6 +11,8 @@ from .view_modules import (
     plan_views,
     customer_views,
     subscription_views,
+    stripe_webhook_views,
+    webhook_management_views,
 )
 
 app_name = 'tenants'
@@ -43,6 +45,13 @@ urlpatterns = [
     # Webhook Configuration (unified endpoint handles GET/POST/DELETE)
     path('tenants/webhooks/config/', webhook_views.webhook_config, name='webhook_config'),
     path('tenants/webhooks/test/', webhook_views.test_webhook, name='test_webhook'),
+    
+    # Webhook Event Management
+    path('webhooks/events/', webhook_management_views.list_webhook_events, name='list_webhook_events'),
+    path('webhooks/events/<int:event_id>/', webhook_management_views.get_webhook_event, name='get_webhook_event'),
+    path('webhooks/events/<int:event_id>/retry/', webhook_management_views.retry_webhook_event, name='retry_webhook_event'),
+    path('webhooks/event-types/', webhook_management_views.webhook_event_types, name='webhook_event_types'),
+    path('webhooks/stats/', webhook_management_views.webhook_statistics, name='webhook_statistics'),
     
     # Subscription Plans
     path('plans/', plan_views.plans_list_create, name='plans'),  # GET (list) / POST (create)
