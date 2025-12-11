@@ -59,7 +59,7 @@ def deliver_webhook_to_tenant(webhook_event_id):
         webhook_event = TenantWebhookEvent.objects.select_related('tenant').get(
             id=webhook_event_id
         )
-    except WebhookEvent.DoesNotExist:
+    except TenantWebhookEvent.DoesNotExist:
         return
     
     tenant = webhook_event.tenant
