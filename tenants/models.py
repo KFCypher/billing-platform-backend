@@ -85,6 +85,11 @@ class Tenant(TimeStampedModel):
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         help_text="Platform fee percentage (0-100)"
     )
+    platform_fee_fixed_cents = models.IntegerField(
+        default=50,
+        validators=[MinValueValidator(0)],
+        help_text="Fixed platform fee in cents (e.g., 50 = $0.50)"
+    )
     
     # Mobile Money Integration
     momo_merchant_id = models.CharField(

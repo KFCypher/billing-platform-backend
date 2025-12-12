@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/v1/payments/', include('payments.urls')),
     path('api/v1/webhooks/', include('webhooks.urls')),
     path('api/v1/analytics/', include('analytics.urls')),
+    path('api/v1/widget/', include('widget.urls')),
 ]
 
 if settings.DEBUG:

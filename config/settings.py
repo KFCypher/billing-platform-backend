@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'payments.apps.PaymentsConfig',
     'webhooks.apps.WebhooksConfig',
     'analytics.apps.AnalyticsConfig',
+    'checkout.apps.CheckoutConfig',
+    'widget.apps.WidgetConfig',
 ]
 
 MIDDLEWARE = [
