@@ -14,6 +14,7 @@ from .view_modules import (
     stripe_webhook_views,
     webhook_management_views,
     momo_config_views,
+    paystack_config_views,
 )
 
 app_name = 'tenants'
@@ -38,11 +39,13 @@ urlpatterns = [
     path('tenants/stripe/status/', stripe_views.get_stripe_connect_status, name='stripe_status'),
     path('tenants/stripe/disconnect/', stripe_views.disconnect_stripe, name='stripe_disconnect'),
     
-    # Mobile Money Configuration
-    path('tenants/momo/config/', momo_config_views.configure_momo, name='configure_momo'),  # POST
-    path('tenants/momo/config/', momo_config_views.get_momo_config, name='get_momo_config'),  # GET
-    path('tenants/momo/config/', momo_config_views.disable_momo, name='disable_momo'),  # DELETE
+    # Mobile Money Configuration (unified endpoint handles GET/POST/DELETE)
+    path('tenants/momo/config/', momo_config_views.momo_config, name='momo_config'),
     path('tenants/momo/test/', momo_config_views.test_momo_connection, name='test_momo_connection'),  # POST
+    
+    # Paystack Configuration (unified endpoint handles GET/POST/DELETE)
+    path('tenants/paystack/config/', paystack_config_views.paystack_config, name='paystack_config'),
+    path('tenants/paystack/test/', paystack_config_views.test_paystack_connection, name='test_paystack_connection'),
     
     # API Key Management
     path('tenants/api-keys/', apikey_views.list_api_keys, name='list_api_keys'),

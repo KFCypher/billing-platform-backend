@@ -12,9 +12,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@api_view(['POST'])
+@api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def configure_momo(request):
+def momo_config(request):
+    """
+    Unified endpoint for Mobile Money configuration.
+    
+    GET: Get current configuration
+    POST: Configure Mobile Money credentials
+    DELETE: Disable Mobile Money
+    """
+    tenant = request.tenant
+    
+    if request.method == 'GET':
+        return get_momo_config_handler(request, tenant)
+    elif request.method == 'POST':
+        return configure_momo_handler(request, tenant)
+    elif request.method == 'DELETE':
+        return disable_momo_handler(request, tenant)
+
+
+def configure_momo_handler(request, tenant):
     """
     Configure Mobile Money credentials for tenant.
     
@@ -122,9 +140,7 @@ def configure_momo(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_momo_config(request):
+def get_momo_config_handler(request, tenant):
     """
     Get current Mobile Money configuration for tenant.
     
@@ -149,9 +165,7 @@ def get_momo_config(request):
     }, status=status.HTTP_200_OK)
 
 
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def disable_momo(request):
+def disable_momo_handler(request, tenant):
     """
     Disable Mobile Money for tenant.
     
@@ -233,3 +247,9 @@ def test_momo_connection(request):
             'error': 'CONNECTION_TEST_FAILED',
             'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Backward compatibility - keep old function names
+configure_momo = configure_momo_handler
+get_momo_config = get_momo_config_handler
+disable_momo = disable_momo_handler

@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db import models as django_models
 from datetime import timedelta
 try:
     import stripe
@@ -39,7 +40,7 @@ def authenticate_widget_request(api_key_string):
     try:
         # Check both live and test public keys
         tenant = Tenant.objects.filter(
-            models.Q(api_key_public=api_key_string) | models.Q(api_key_test_public=api_key_string),
+            django_models.Q(api_key_public=api_key_string) | django_models.Q(api_key_test_public=api_key_string),
             is_active=True
         ).first()
         
@@ -241,9 +242,77 @@ def create_checkout_session(request):
             'provider': 'momo'
         })
     
+    elif payment_provider == 'paystack':
+        # Paystack flow - initialize transaction
+        if not tenant.paystack_enabled:
+            return Response({
+                'error': 'Paystack not configured for this tenant'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            import requests
+            
+            # Initialize Paystack transaction
+            paystack_api_url = 'https://api.paystack.co/transaction/initialize'
+            
+            # Build callback URLs
+            base_url = request.build_absolute_uri('/').rstrip('/')
+            callback_url = f"{base_url}/checkout/paystack/callback?session_id={checkout_session.id}"
+            
+            # Calculate amount in kobo (Paystack uses smallest currency unit)
+            amount_kobo = price_cents  # Already in cents, same as kobo for NGN
+            
+            headers = {
+                'Authorization': f'Bearer {tenant.paystack_secret_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            payload = {
+                'email': customer_email,
+                'amount': amount_kobo,
+                'currency': plan.currency if plan.currency in ['NGN', 'GHS', 'ZAR', 'USD'] else 'NGN',
+                'reference': str(checkout_session.id),
+                'callback_url': callback_url,
+                'metadata': {
+                    'checkout_session_id': str(checkout_session.id),
+                    'tenant_id': tenant.id,
+                    'plan_id': plan.id,
+                    'customer_name': request.data.get('customer_name', ''),
+                    'platform_fee': platform_fee,
+                    'tenant_net': tenant_net,
+                },
+                'channels': ['card', 'bank', 'ussd', 'mobile_money'],  # Available payment channels
+            }
+            
+            response = requests.post(paystack_api_url, json=payload, headers=headers)
+            response_data = response.json()
+            
+            if response.status_code == 200 and response_data.get('status'):
+                # Save Paystack reference
+                checkout_session.paystack_reference = response_data['data']['reference']
+                checkout_session.save(update_fields=['paystack_reference'])
+                
+                return Response({
+                    'session_id': str(checkout_session.id),
+                    'checkout_url': response_data['data']['authorization_url'],
+                    'provider': 'paystack',
+                    'reference': response_data['data']['reference']
+                })
+            else:
+                checkout_session.mark_canceled()
+                return Response({
+                    'error': f"Paystack error: {response_data.get('message', 'Unknown error')}"
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            checkout_session.mark_canceled()
+            return Response({
+                'error': f'Paystack initialization failed: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
     else:
         return Response({
-            'error': 'Invalid payment provider'
+            'error': 'Invalid payment provider. Use: stripe, momo, or paystack'
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -351,8 +420,8 @@ def change_subscription_plan(request):
             customer=customer,
             status__in=['active', 'trialing']
         )
-        new_plan = TenantPlan.objects.get(id=new_plan_id, tenant=tenant, is_active=True)
-    except (TenantCustomer.DoesNotExist, Subscription.DoesNotExist, TenantPlan.DoesNotExist) as e:
+        new_plan = BillingPlan.objects.get(id=new_plan_id, tenant=tenant, is_active=True)
+    except (TenantCustomer.DoesNotExist, Subscription.DoesNotExist, BillingPlan.DoesNotExist) as e:
         return Response({'error': 'Resource not found'}, status=status.HTTP_404_NOT_FOUND)
     
     # Check if plan is different

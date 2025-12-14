@@ -122,6 +122,29 @@ class Tenant(TimeStampedModel):
         help_text="Whether to use Mobile Money sandbox environment"
     )
     
+    # Paystack Integration
+    paystack_secret_key = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Paystack secret key"
+    )
+    paystack_public_key = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Paystack public key"
+    )
+    paystack_enabled = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether Paystack payments are enabled for this tenant"
+    )
+    paystack_test_mode = models.BooleanField(
+        default=True,
+        help_text="Whether to use Paystack test mode"
+    )
+    
     # Webhooks
     webhook_url = models.URLField(
         max_length=500,

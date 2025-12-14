@@ -41,9 +41,10 @@ class CheckoutSession(models.Model):
     # Payment provider data
     stripe_checkout_session_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     momo_transaction_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+    paystack_reference = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     payment_provider = models.CharField(
         max_length=20, 
-        choices=[('stripe', 'Stripe'), ('momo', 'Mobile Money')],
+        choices=[('stripe', 'Stripe'), ('momo', 'Mobile Money'), ('paystack', 'Paystack')],
         default='stripe'
     )
     

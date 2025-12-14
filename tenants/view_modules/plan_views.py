@@ -47,11 +47,15 @@ def create_plan_handler(request):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check Stripe Connect
-        if not tenant.stripe_connect_account_id:
+        # Check if at least one payment provider is configured
+        has_stripe = bool(tenant.stripe_connect_account_id)
+        has_momo = tenant.momo_enabled
+        has_paystack = tenant.paystack_enabled
+        
+        if not (has_stripe or has_momo or has_paystack):
             return Response({
-                'error': 'Stripe Connect not configured',
-                'message': 'Please connect your Stripe account first'
+                'error': 'No payment provider configured',
+                'message': 'Please configure at least one payment provider (Stripe, Mobile Money, or Paystack) first'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         with transaction.atomic():
@@ -59,40 +63,44 @@ def create_plan_handler(request):
             plan = serializer.save(tenant=tenant)
             
             try:
-                # Create Stripe Product
-                product = stripe.Product.create(
-                    name=plan.name,
-                    description=plan.description or '',
-                    metadata={
-                        'tenant_id': str(tenant.id),
-                        'plan_id': str(plan.id),
-                        **plan.metadata_json
-                    },
-                    stripe_account=tenant.stripe_connect_account_id
-                )
-                
-                # Create Stripe Price
-                price = stripe.Price.create(
-                    product=product.id,
-                    unit_amount=plan.price_cents,
-                    currency=plan.currency,
-                    recurring={
-                        'interval': plan.billing_interval,
-                        'trial_period_days': plan.trial_days if plan.trial_days > 0 else None
-                    },
-                    metadata={
-                        'tenant_id': str(tenant.id),
-                        'plan_id': str(plan.id)
-                    },
-                    stripe_account=tenant.stripe_connect_account_id
-                )
-                
-                # Update plan with Stripe IDs
-                plan.stripe_product_id = product.id
-                plan.stripe_price_id = price.id
-                plan.save()
-                
-                logger.info(f"Plan created: {plan.id} with Stripe product: {product.id}")
+                # Create Stripe Product and Price if Stripe is configured
+                if has_stripe:
+                    # Create Stripe Product
+                    product = stripe.Product.create(
+                        name=plan.name,
+                        description=plan.description or '',
+                        metadata={
+                            'tenant_id': str(tenant.id),
+                            'plan_id': str(plan.id),
+                            **plan.metadata_json
+                        },
+                        stripe_account=tenant.stripe_connect_account_id
+                    )
+                    
+                    # Create Stripe Price
+                    price = stripe.Price.create(
+                        product=product.id,
+                        unit_amount=plan.price_cents,
+                        currency=plan.currency,
+                        recurring={
+                            'interval': plan.billing_interval,
+                            'trial_period_days': plan.trial_days if plan.trial_days > 0 else None
+                        },
+                        metadata={
+                            'tenant_id': str(tenant.id),
+                            'plan_id': str(plan.id)
+                        },
+                        stripe_account=tenant.stripe_connect_account_id
+                    )
+                    
+                    # Update plan with Stripe IDs
+                    plan.stripe_product_id = product.id
+                    plan.stripe_price_id = price.id
+                    plan.save()
+                    
+                    logger.info(f"Plan created with Stripe: {plan.id}, product: {product.id}")
+                else:
+                    logger.info(f"Plan created without Stripe: {plan.id} (using Mobile Money/Paystack)")
                 
                 return Response({
                     'message': 'Plan created successfully',
