@@ -199,6 +199,7 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
     'x-api-key',
+    'x-tenant-id',
 ]
 
 # Celery Configuration

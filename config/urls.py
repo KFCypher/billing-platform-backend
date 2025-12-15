@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from widget.views import paystack_callback
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -15,6 +16,9 @@ urlpatterns = [
     path('api/v1/webhooks/', include('webhooks.urls')),
     path('api/v1/analytics/', include('analytics.urls')),
     path('api/v1/widget/', include('widget.urls')),
+    
+    # Checkout callbacks
+    path('checkout/paystack/callback', paystack_callback, name='paystack_callback'),
 ]
 
 if settings.DEBUG:

@@ -25,7 +25,7 @@ class CheckoutSession(models.Model):
     
     # Relationships
     tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE, related_name='checkout_sessions')
-    plan = models.ForeignKey('billing.BillingPlan', on_delete=models.CASCADE, related_name='checkout_sessions')
+    plan = models.ForeignKey('tenants.TenantPlan', on_delete=models.CASCADE, related_name='checkout_sessions')
     
     # Customer information
     customer_email = models.EmailField()

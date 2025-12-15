@@ -191,7 +191,7 @@ class TenantPlanSerializer(serializers.ModelSerializer):
     
     def validate_currency(self, value):
         """Validate currency code."""
-        valid_currencies = ['usd', 'eur', 'gbp', 'cad', 'aud']
+        valid_currencies = ['ghs', 'ngn', 'zar', 'usd', 'eur', 'gbp', 'cad', 'aud']
         if value.lower() not in valid_currencies:
             raise serializers.ValidationError(f"Currency must be one of: {', '.join(valid_currencies)}")
         return value.lower()
@@ -232,7 +232,7 @@ class TenantPlanCreateSerializer(serializers.ModelSerializer):
     
     def validate_currency(self, value):
         """Validate and normalize currency code."""
-        valid_currencies = ['usd', 'eur', 'gbp', 'cad', 'aud']
+        valid_currencies = ['ghs', 'ngn', 'zar', 'usd', 'eur', 'gbp', 'cad', 'aud']
         currency_lower = value.lower()
         if currency_lower not in valid_currencies:
             raise serializers.ValidationError(

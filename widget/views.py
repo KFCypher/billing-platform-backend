@@ -1,6 +1,7 @@
 """
 Widget API Views - Embeddable billing widgets for tenant websites
 """
+import requests
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
@@ -17,9 +18,7 @@ except ImportError:
     stripe = None
     StripeError = Exception
 
-from tenants.models import Tenant, TenantCustomer
-from billing.models import BillingPlan
-from subscriptions.models import Subscription
+from tenants.models import Tenant, TenantCustomer, TenantPlan, TenantSubscription
 from checkout.models import CheckoutSession
 from core.platform_fees import calculate_platform_fee, calculate_fee_breakdown
 
@@ -70,34 +69,32 @@ def get_plans(request):
         return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
     
     # Get active, visible plans
-    plans = BillingPlan.objects.filter(
+    plans = TenantPlan.objects.filter(
         tenant=tenant,
         is_active=True
-    ).order_by('amount')
+    ).order_by('price_cents')
     
     # Serialize plans
     plans_data = []
     for plan in plans:
-        # Convert Decimal amount to cents for consistency
-        price_cents = int(plan.amount * 100)
         plans_data.append({
             'id': plan.id,
             'name': plan.name,
-            'description': plan.description,
-            'price': float(plan.amount),
-            'price_cents': price_cents,
+            'description': plan.description or '',
+            'price': float(plan.price_cents / 100),  # Convert cents to dollars
+            'price_cents': plan.price_cents,
             'currency': plan.currency,
-            'billing_interval': plan.interval,
-            'trial_days': plan.trial_period_days or 0,
-            'features': plan.metadata.get('features', []) if isinstance(plan.metadata, dict) else [],
-            'is_featured': plan.metadata.get('is_featured', False) if isinstance(plan.metadata, dict) else False,
+            'billing_interval': plan.billing_interval,  # 'day', 'week', 'month', 'year'
+            'trial_days': plan.trial_days or 0,
+            'features': plan.features_json if isinstance(plan.features_json, list) else [],
+            'is_featured': False,  # Add this field to TenantPlan if needed
         })
     
     return Response({
         'plans': plans_data,
         'tenant': {
             'name': tenant.company_name,
-            'currency': 'USD'  # Could be from tenant settings
+            'currency': 'GHS'  # Default currency for Paystack
         }
     })
 
@@ -145,12 +142,12 @@ def create_checkout_session(request):
     
     # Get plan
     try:
-        plan = BillingPlan.objects.get(id=plan_id, tenant=tenant, is_active=True)
-    except BillingPlan.DoesNotExist:
+        plan = TenantPlan.objects.get(id=plan_id, tenant=tenant, is_active=True)
+    except TenantPlan.DoesNotExist:
         return Response({'error': 'Plan not found'}, status=status.HTTP_404_NOT_FOUND)
     
     # Calculate platform fee
-    price_cents = int(plan.amount * 100)
+    price_cents = plan.price_cents
     platform_fee = calculate_platform_fee(price_cents, tenant)
     tenant_net = price_cents - platform_fee
     
@@ -158,7 +155,7 @@ def create_checkout_session(request):
     payment_provider = request.data.get('payment_provider', 'stripe')
     
     # Create checkout session record
-    trial_days = plan.trial_period_days or 0
+    trial_days = plan.trial_days or 0
     checkout_session = CheckoutSession.objects.create(
         tenant=tenant,
         plan=plan,
@@ -259,8 +256,44 @@ def create_checkout_session(request):
             base_url = request.build_absolute_uri('/').rstrip('/')
             callback_url = f"{base_url}/checkout/paystack/callback?session_id={checkout_session.id}"
             
-            # Calculate amount in kobo (Paystack uses smallest currency unit)
-            amount_kobo = price_cents  # Already in cents, same as kobo for NGN
+            # Paystack will use account default currency when currency field is omitted
+            # Since your account default is GHS, we pass GHS amounts directly
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            logger.info(f"Plan details: currency={plan.currency}, price_cents={plan.price_cents}")
+            plan_currency = plan.currency.upper() if plan.currency else 'GHS'
+            
+            # Convert to GHS pesewas if plan is in different currency
+            if plan_currency == 'GHS':
+                # Already in GHS pesewas - use directly
+                amount_pesewas = price_cents
+                logger.info(f"GHS plan: Using {amount_pesewas} pesewas (GH₵{amount_pesewas/100:.2f}) directly")
+            elif plan_currency == 'USD':
+                # Convert USD cents to GHS pesewas (1 USD ≈ 12 GHS)
+                usd_amount = price_cents / 100
+                ghs_amount = usd_amount * 12
+                amount_pesewas = int(ghs_amount * 100)
+                logger.info(f"USD plan: Converting ${usd_amount:.2f} to GH₵{ghs_amount:.2f} = {amount_pesewas} pesewas")
+            elif plan_currency == 'NGN':
+                # Convert NGN kobo to GHS pesewas (1 GHS ≈ 133 NGN, so 1 NGN ≈ 0.0075 GHS)
+                ngn_amount = price_cents / 100
+                ghs_amount = ngn_amount / 133
+                amount_pesewas = int(ghs_amount * 100)
+                logger.info(f"NGN plan: Converting ₦{ngn_amount:.2f} to GH₵{ghs_amount:.2f} = {amount_pesewas} pesewas")
+            else:
+                # Convert other currencies to GHS
+                currency_to_ghs_rate = {
+                    'EUR': 14, 'GBP': 16, 'CAD': 9, 
+                    'AUD': 8, 'ZAR': 0.68
+                }
+                rate = currency_to_ghs_rate.get(plan_currency, 12)
+                amount = price_cents / 100
+                ghs_amount = amount * rate
+                amount_pesewas = int(ghs_amount * 100)
+                logger.info(f"{plan_currency} plan: Converting to GH₵{ghs_amount:.2f} = {amount_pesewas} pesewas")
+            
+            logger.info(f"Final Paystack payment: amount={amount_pesewas} pesewas (will use account default GHS)")
             
             headers = {
                 'Authorization': f'Bearer {tenant.paystack_secret_key}',
@@ -269,8 +302,9 @@ def create_checkout_session(request):
             
             payload = {
                 'email': customer_email,
-                'amount': amount_kobo,
-                'currency': plan.currency if plan.currency in ['NGN', 'GHS', 'ZAR', 'USD'] else 'NGN',
+                'amount': amount_pesewas,
+                # DO NOT specify currency - Paystack will use account default
+                # Specifying currency requires it to be enabled in dashboard settings
                 'reference': str(checkout_session.id),
                 'callback_url': callback_url,
                 'metadata': {
@@ -280,12 +314,25 @@ def create_checkout_session(request):
                     'customer_name': request.data.get('customer_name', ''),
                     'platform_fee': platform_fee,
                     'tenant_net': tenant_net,
+                    'original_currency': plan_currency,  # Track original currency
+                    'original_amount': price_cents,  # Track original amount
                 },
                 'channels': ['card', 'bank', 'ussd', 'mobile_money'],  # Available payment channels
             }
             
-            response = requests.post(paystack_api_url, json=payload, headers=headers)
+            logger.info(f"Sending to Paystack: {payload}")
+            logger.info(f"Paystack API URL: {paystack_api_url}")
+            
+            response = requests.post(
+                paystack_api_url, 
+                json=payload, 
+                headers=headers,
+                timeout=30  # 30 second timeout
+            )
             response_data = response.json()
+            
+            logger.info(f"Paystack response status: {response.status_code}")
+            logger.info(f"Paystack response: {response_data}")
             
             if response.status_code == 200 and response_data.get('status'):
                 # Save Paystack reference
@@ -304,6 +351,12 @@ def create_checkout_session(request):
                     'error': f"Paystack error: {response_data.get('message', 'Unknown error')}"
                 }, status=status.HTTP_400_BAD_REQUEST)
                 
+        except requests.exceptions.RequestException as e:
+            checkout_session.mark_canceled()
+            return Response({
+                'error': 'Network error: Unable to connect to Paystack. Please check your internet connection.',
+                'details': str(e)
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except Exception as e:
             checkout_session.mark_canceled()
             return Response({
@@ -420,8 +473,8 @@ def change_subscription_plan(request):
             customer=customer,
             status__in=['active', 'trialing']
         )
-        new_plan = BillingPlan.objects.get(id=new_plan_id, tenant=tenant, is_active=True)
-    except (TenantCustomer.DoesNotExist, Subscription.DoesNotExist, BillingPlan.DoesNotExist) as e:
+        new_plan = TenantPlan.objects.get(id=new_plan_id, tenant=tenant, is_active=True)
+    except (TenantCustomer.DoesNotExist, Subscription.DoesNotExist, TenantPlan.DoesNotExist) as e:
         return Response({'error': 'Resource not found'}, status=status.HTTP_404_NOT_FOUND)
     
     # Check if plan is different
@@ -584,3 +637,229 @@ def cancel_subscription(request):
             'message': 'Subscription canceled' if immediate else 'Subscription will cancel at period end',
             'canceled_immediately': immediate
         })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def paystack_callback(request):
+    """
+    Handle Paystack payment callback after customer completes payment.
+    GET /checkout/paystack/callback?session_id=xxx&reference=xxx&trxref=xxx
+    """
+    from django.shortcuts import redirect
+    
+    session_id = request.query_params.get('session_id')
+    reference = request.query_params.get('reference') or request.query_params.get('trxref')
+    
+    if not session_id:
+        return redirect('/payment-error?error=missing_session')
+    
+    try:
+        checkout_session = CheckoutSession.objects.get(id=session_id)
+    except CheckoutSession.DoesNotExist:
+        return redirect('/payment-error?error=session_not_found')
+    
+    # Verify payment with Paystack
+    tenant = checkout_session.tenant
+    
+    try:
+        verify_url = f'https://api.paystack.co/transaction/verify/{reference}'
+        headers = {
+            'Authorization': f'Bearer {tenant.paystack_secret_key}',
+        }
+        
+        response = requests.get(verify_url, headers=headers, timeout=30)
+        data = response.json()
+        
+        if response.status_code == 200 and data.get('status') and data['data']['status'] == 'success':
+            # Payment successful - create subscription
+            customer, _ = TenantCustomer.objects.get_or_create(
+                tenant=tenant,
+                email=checkout_session.customer_email,
+                defaults={'full_name': checkout_session.customer_name or ''}
+            )
+            
+            # Create subscription using TenantSubscription
+            subscription = TenantSubscription.objects.create(
+                tenant=tenant,
+                customer=customer,
+                plan=checkout_session.plan,
+                status='active',
+                current_period_start=timezone.now(),
+                current_period_end=timezone.now() + timedelta(days=30),  # Adjust based on plan interval
+                metadata_json={
+                    'payment_provider': 'paystack',
+                    'paystack_reference': reference,
+                    'paystack_transaction_id': data['data'].get('id'),
+                    'amount_paid': data['data'].get('amount'),
+                    'currency': data['data'].get('currency'),
+                },
+            )
+            
+            # Mark checkout as completed
+            checkout_session.status = 'completed'
+            checkout_session.completed_at = timezone.now()
+            checkout_session.save()
+            
+            # Redirect to success URL
+            return redirect(checkout_session.success_url + f'?subscription_id={subscription.id}')
+        else:
+            # Payment failed
+            checkout_session.mark_canceled()
+            return redirect(checkout_session.cancel_url + '?error=payment_failed')
+            
+    except Exception as e:
+        checkout_session.mark_canceled()
+        return redirect(checkout_session.cancel_url + f'?error={str(e)}')
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([WidgetRateThrottle])
+def verify_subscription(request):
+    """
+    POST /api/v1/widget/verify-subscription
+    
+    Verify if a customer has an active subscription.
+    Use this to protect premium content on your website.
+    
+    Request body:
+    {
+        "api_key": "pk_xxx",
+        "email": "customer@example.com"
+    }
+    
+    Response:
+    {
+        "has_subscription": true,
+        "subscription": {
+            "id": 123,
+            "plan_name": "Pro Plan",
+            "status": "active",
+            "current_period_end": "2025-01-15T10:30:00Z",
+            "features": ["feature1", "feature2"]
+        }
+    }
+    """
+    api_key = request.data.get('api_key')
+    
+    try:
+        tenant = authenticate_widget_request(api_key)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    email = request.data.get('email')
+    if not email:
+        return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Find customer
+    try:
+        customer = TenantCustomer.objects.get(tenant=tenant, email=email)
+    except TenantCustomer.DoesNotExist:
+        return Response({
+            'has_subscription': False,
+            'message': 'No customer found with this email'
+        })
+    
+    # Get active subscriptions
+    active_subscriptions = TenantSubscription.objects.filter(
+        tenant=tenant,
+        customer=customer,
+        status__in=['active', 'trialing'],
+        current_period_end__gte=timezone.now()
+    ).select_related('plan').order_by('-created_at')
+    
+    if not active_subscriptions.exists():
+        return Response({
+            'has_subscription': False,
+            'message': 'No active subscription found'
+        })
+    
+    # Return the most recent active subscription
+    subscription = active_subscriptions.first()
+    
+    return Response({
+        'has_subscription': True,
+        'subscription': {
+            'id': subscription.id,
+            'plan_id': subscription.plan.id,
+            'plan_name': subscription.plan.name,
+            'status': subscription.status,
+            'current_period_start': subscription.current_period_start,
+            'current_period_end': subscription.current_period_end,
+            'cancel_at_period_end': subscription.cancel_at_period_end,
+            'features': subscription.plan.features_json if isinstance(subscription.plan.features_json, list) else [],
+            'trial_end': subscription.trial_end,
+        }
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([WidgetRateThrottle])
+def check_feature_access(request):
+    """
+    POST /api/v1/widget/check-feature-access
+    
+    Check if a customer has access to a specific feature.
+    
+    Request body:
+    {
+        "api_key": "pk_xxx",
+        "email": "customer@example.com",
+        "feature": "advanced_analytics"
+    }
+    
+    Response:
+    {
+        "has_access": true,
+        "plan_name": "Pro Plan",
+        "subscription_status": "active"
+    }
+    """
+    api_key = request.data.get('api_key')
+    
+    try:
+        tenant = authenticate_widget_request(api_key)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    email = request.data.get('email')
+    feature = request.data.get('feature')
+    
+    if not email or not feature:
+        return Response({'error': 'Email and feature are required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Find customer
+    try:
+        customer = TenantCustomer.objects.get(tenant=tenant, email=email)
+    except TenantCustomer.DoesNotExist:
+        return Response({
+            'has_access': False,
+            'message': 'No customer found'
+        })
+    
+    # Get active subscriptions
+    active_subscription = TenantSubscription.objects.filter(
+        tenant=tenant,
+        customer=customer,
+        status__in=['active', 'trialing'],
+        current_period_end__gte=timezone.now()
+    ).select_related('plan').first()
+    
+    if not active_subscription:
+        return Response({
+            'has_access': False,
+            'message': 'No active subscription'
+        })
+    
+    # Check if feature is in plan
+    plan_features = active_subscription.plan.features_json if isinstance(active_subscription.plan.features_json, list) else []
+    has_access = feature in plan_features
+    
+    return Response({
+        'has_access': has_access,
+        'plan_name': active_subscription.plan.name,
+        'subscription_status': active_subscription.status,
+        'available_features': plan_features
+    })

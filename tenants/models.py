@@ -144,6 +144,12 @@ class Tenant(TimeStampedModel):
         default=True,
         help_text="Whether to use Paystack test mode"
     )
+    paystack_default_currency = models.CharField(
+        max_length=3,
+        default='ghs',
+        choices=[('ngn', 'NGN'), ('ghs', 'GHS'), ('zar', 'ZAR'), ('usd', 'USD')],
+        help_text="Default currency for Paystack transactions"
+    )
     
     # Webhooks
     webhook_url = models.URLField(
@@ -365,7 +371,10 @@ class TenantPlan(TimeStampedModel):
     ]
     
     CURRENCY_CHOICES = [
+        ('ngn', 'NGN'),  # Nigerian Naira (Paystack primary)
         ('usd', 'USD'),
+        ('ghs', 'GHS'),  # Ghanaian Cedi (Paystack)
+        ('zar', 'ZAR'),  # South African Rand (Paystack)
         ('eur', 'EUR'),
         ('gbp', 'GBP'),
         ('cad', 'CAD'),
@@ -398,7 +407,7 @@ class TenantPlan(TimeStampedModel):
     currency = models.CharField(
         max_length=3,
         choices=CURRENCY_CHOICES,
-        default='usd',
+        default='ghs',
         help_text="Three-letter ISO currency code"
     )
     billing_interval = models.CharField(

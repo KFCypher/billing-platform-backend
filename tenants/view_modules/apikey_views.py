@@ -6,6 +6,9 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from ..models import Tenant
 from ..permissions import IsTenantOwner, IsTenantAdmin
 from core.utils import generate_api_key
@@ -235,3 +238,109 @@ def revoke_api_keys(request):
             'error': 'Failed to revoke API keys',
             'details': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_api_keys(request):
+    """
+    Simple endpoint to get API keys using X-Tenant-ID header.
+    No authentication required - for dashboard use.
+    
+    GET /api/tenants/api-keys/
+    
+    Headers:
+        X-Tenant-ID: <tenant_id>
+    
+    Response:
+    {
+        "keys": [
+            {
+                "type": "live_public",
+                "key": "pk_live_...",
+                "masked": false,
+                "created_at": "..."
+            },
+            {
+                "type": "live_secret",
+                "key": "sk_live_****...last4",
+                "masked": true,
+                "created_at": "..."
+            },
+            {
+                "type": "test_public",
+                "key": "pk_test_...",
+                "masked": false,
+                "created_at": "..."
+            },
+            {
+                "type": "test_secret",
+                "key": "sk_test_****...last4",
+                "masked": true,
+                "created_at": "..."
+            }
+        ]
+    }
+    """
+    try:
+        # Get tenant ID from header
+        tenant_id = request.headers.get('X-Tenant-ID')
+        if not tenant_id:
+            return JsonResponse({
+                'error': 'Missing X-Tenant-ID header'
+            }, status=400)
+        
+        # Get tenant
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except Tenant.DoesNotExist:
+            return JsonResponse({
+                'error': 'Tenant not found'
+            }, status=404)
+        
+        def mask_secret(key):
+            """Mask secret key showing only last 4 characters."""
+            if not key:
+                return None
+            prefix = key[:8]  # e.g., "sk_live_"
+            last4 = key[-4:]
+            return f"{prefix}****...{last4}"
+        
+        keys = [
+            {
+                'type': 'live_public',
+                'key': tenant.api_key_public,
+                'masked': False,
+                'created_at': tenant.created_at.isoformat()
+            },
+            {
+                'type': 'live_secret',
+                'key': mask_secret(tenant.api_key_secret),
+                'masked': True,
+                'created_at': tenant.created_at.isoformat()
+            },
+            {
+                'type': 'test_public',
+                'key': tenant.api_key_test_public,
+                'masked': False,
+                'created_at': tenant.created_at.isoformat()
+            },
+            {
+                'type': 'test_secret',
+                'key': mask_secret(tenant.api_key_test_secret),
+                'masked': True,
+                'created_at': tenant.created_at.isoformat()
+            }
+        ]
+        
+        return JsonResponse({
+            'keys': keys,
+            'warning': 'Secret keys are masked. Store them securely when first generated.'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error fetching API keys: {str(e)}")
+        return JsonResponse({
+            'error': 'Failed to fetch API keys',
+            'details': str(e)
+        }, status=500)

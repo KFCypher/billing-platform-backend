@@ -20,7 +20,7 @@ class Payment(TenantAwareModel):
     subscription = models.ForeignKey('subscriptions.Subscription', on_delete=models.SET_NULL, null=True, blank=True)
     
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default='USD')
+    currency = models.CharField(max_length=3, default='GHS')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     
     # Stripe payment intent ID

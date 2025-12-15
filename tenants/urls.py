@@ -48,7 +48,8 @@ urlpatterns = [
     path('tenants/paystack/test/', paystack_config_views.test_paystack_connection, name='test_paystack_connection'),
     
     # API Key Management
-    path('tenants/api-keys/', apikey_views.list_api_keys, name='list_api_keys'),
+    path('tenants/api-keys/', apikey_views.get_api_keys, name='get_api_keys'),  # Simple GET endpoint
+    path('tenants/api-keys/list/', apikey_views.list_api_keys, name='list_api_keys'),  # DRF endpoint
     path('tenants/api-keys/regenerate/', apikey_views.regenerate_api_keys, name='regenerate_api_keys'),
     path('tenants/api-keys/revoke/', apikey_views.revoke_api_keys, name='revoke_api_keys'),
     
