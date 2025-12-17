@@ -56,7 +56,7 @@ def tenant_user_factory():
 
 @pytest.fixture
 def test_tenant(db):
-    """Create a test tenant with proper setup."""
+    """Create a test tenant with proper setup (no dummy metrics)."""
     from tenants.models import Tenant, TenantUser
     
     # First create the tenant
