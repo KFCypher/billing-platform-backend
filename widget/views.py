@@ -74,24 +74,12 @@ def get_plans(request):
         is_active=True
     ).order_by('price_cents')
     
-    # Serialize plans
-    plans_data = []
-    for plan in plans:
-        plans_data.append({
-            'id': plan.id,
-            'name': plan.name,
-            'description': plan.description or '',
-            'price': float(plan.price_cents / 100),  # Convert cents to dollars
-            'price_cents': plan.price_cents,
-            'currency': plan.currency,
-            'billing_interval': plan.billing_interval,  # 'day', 'week', 'month', 'year'
-            'trial_days': plan.trial_days or 0,
-            'features': plan.features_json if isinstance(plan.features_json, list) else [],
-            'is_featured': False,  # Add this field to TenantPlan if needed
-        })
+    # Use serializer to get properly formatted data
+    from tenants.serializers import TenantPlanSerializer
+    serializer = TenantPlanSerializer(plans, many=True)
     
     return Response({
-        'plans': plans_data,
+        'plans': serializer.data,
         'tenant': {
             'name': tenant.company_name,
             'currency': 'GHS'  # Default currency for Paystack

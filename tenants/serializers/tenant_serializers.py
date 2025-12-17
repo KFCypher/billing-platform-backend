@@ -168,18 +168,58 @@ class TenantPlanSerializer(serializers.ModelSerializer):
     has_trial = serializers.ReadOnlyField()
     tenant_name = serializers.CharField(source='tenant.company_name', read_only=True)
     
+    # Add frontend-friendly fields
+    price = serializers.SerializerMethodField()
+    features = serializers.SerializerMethodField()
+    billing_period = serializers.CharField(source='billing_interval', read_only=True)
+    trial_period_days = serializers.IntegerField(source='trial_days', read_only=True)
+    is_featured = serializers.BooleanField(default=False, read_only=True)  # Can add this field to model later
+    currency_symbol = serializers.SerializerMethodField()
+    
     class Meta:
         model = TenantPlan
         fields = [
             'id', 'tenant', 'tenant_name', 'name', 'description',
-            'price_cents', 'price_display', 'currency', 'billing_interval',
-            'trial_days', 'has_trial',
+            'price_cents', 'price', 'price_display', 'currency', 'currency_symbol',
+            'billing_interval', 'billing_period',
+            'trial_days', 'trial_period_days', 'has_trial',
             'stripe_product_id', 'stripe_price_id',
-            'features_json', 'metadata_json',
-            'is_active', 'is_visible',
+            'features_json', 'features', 'metadata_json',
+            'is_active', 'is_visible', 'is_featured',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'tenant', 'stripe_product_id', 'stripe_price_id', 'created_at', 'updated_at']
+    
+    def get_price(self, obj):
+        """Return price in major currency unit (e.g., GH₵119.88 instead of 11988 pesewas)."""
+        return obj.price_cents / 100
+    
+    def get_features(self, obj):
+        """Return features as a list for frontend compatibility."""
+        if isinstance(obj.features_json, dict):
+            # If features_json is a dict with a 'features' key containing a list
+            if 'features' in obj.features_json:
+                return obj.features_json['features']
+            # If it's a dict of feature_name: description, return just the keys
+            return list(obj.features_json.keys())
+        elif isinstance(obj.features_json, list):
+            # Already a list
+            return obj.features_json
+        return []
+    
+    def get_currency_symbol(self, obj):
+        """Return the currency symbol for display."""
+        currency_symbols = {
+            'ghs': 'GH₵',
+            'ngn': '₦',
+            'zar': 'R',
+            'usd': '$',
+            'eur': '€',
+            'gbp': '£',
+            'cad': 'CA$',
+            'aud': 'A$',
+        }
+        return currency_symbols.get(obj.currency.lower(), obj.currency.upper())
     
     def validate_price_cents(self, value):
         """Ensure price is positive."""
@@ -197,9 +237,9 @@ class TenantPlanSerializer(serializers.ModelSerializer):
         return value.lower()
     
     def validate_features_json(self, value):
-        """Ensure features is a dictionary."""
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("Features must be a JSON object.")
+        """Ensure features is a dictionary or list."""
+        if not isinstance(value, (dict, list)):
+            raise serializers.ValidationError("Features must be a JSON object or array.")
         return value
     
     def validate_metadata_json(self, value):

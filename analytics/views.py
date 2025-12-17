@@ -65,11 +65,11 @@ def get_analytics_overview(request):
     data = {
         'mrr': {
             'cents': latest_metric.mrr_cents if latest_metric else 0,
-            'formatted': f"${(latest_metric.mrr_cents / 100):.2f}" if latest_metric else "$0.00"
+            'formatted': f"GH₵{(latest_metric.mrr_cents / 100):.2f}" if latest_metric else "GH₵0.00"
         },
         'arr': {
             'cents': latest_metric.arr_cents if latest_metric else 0,
-            'formatted': f"${(latest_metric.arr_cents / 100):.2f}" if latest_metric else "$0.00"
+            'formatted': f"GH₵{(latest_metric.arr_cents / 100):.2f}" if latest_metric else "GH₵0.00"
         },
         'active_subscribers': latest_metric.active_subscribers if latest_metric else 0,
         'total_customers': latest_metric.total_customers if latest_metric else 0,
@@ -77,7 +77,7 @@ def get_analytics_overview(request):
         'growth_rate': round(growth_rate, 2),
         'arpu': {
             'cents': int(arpu),
-            'formatted': f"${(arpu / 100):.2f}"
+            'formatted': f"GH₵{(arpu / 100):.2f}"
         },
         'as_of_date': latest_metric.date.isoformat() if latest_metric else None
     }
