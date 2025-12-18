@@ -3,7 +3,7 @@ Admin configuration for tenant models.
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Tenant, TenantUser
+from .models import Tenant, TenantUser, TenantPlan, TenantCustomer
 
 
 @admin.register(Tenant)
@@ -136,3 +136,95 @@ class TenantUserAdmin(admin.ModelAdmin):
         if 'password' in form.changed_data:
             obj.set_password(form.cleaned_data['password'])
         super().save_model(request, obj, form, change)
+
+
+@admin.register(TenantPlan)
+class TenantPlanAdmin(admin.ModelAdmin):
+    """
+    Admin interface for TenantPlan model.
+    """
+    list_display = [
+        'name', 'tenant', 'display_price', 'billing_interval',
+        'is_active', 'trial_days', 'created_at'
+    ]
+    list_filter = ['is_active', 'billing_interval', 'tenant', 'created_at']
+    search_fields = ['name', 'description', 'tenant__company_name']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'stripe_product_id', 'stripe_price_id']
+    raw_id_fields = ['tenant']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'name', 'description')
+        }),
+        ('Pricing', {
+            'fields': ('price_cents', 'currency', 'billing_interval')
+        }),
+        ('Trial & Features', {
+            'fields': ('trial_days', 'features_json')
+        }),
+        ('Stripe Integration', {
+            'fields': ('stripe_product_id', 'stripe_price_id'),
+            'classes': ('collapse',)
+        }),
+        ('Status & Metadata', {
+            'fields': ('is_active', 'metadata_json', 'created_at', 'updated_at')
+        }),
+    )
+    
+    def display_price(self, obj):
+        """Display formatted price."""
+        price = obj.price_cents / 100
+        return f'{obj.currency.upper()} {price:.2f}'
+    display_price.short_description = 'Price'
+
+
+@admin.register(TenantCustomer)
+class TenantCustomerAdmin(admin.ModelAdmin):
+    """
+    Admin interface for TenantCustomer model.
+    """
+    list_display = [
+        'email', 'full_name', 'tenant', 'country',
+        'has_active_subscription', 'created_at'
+    ]
+    list_filter = ['tenant', 'country', 'created_at']
+    search_fields = ['email', 'full_name', 'tenant__company_name']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'stripe_customer_id']
+    raw_id_fields = ['tenant']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'email', 'full_name', 'phone')
+        }),
+        ('Location', {
+            'fields': ('country', 'city', 'postal_code')
+        }),
+        ('Marketing', {
+            'fields': ('utm_source', 'utm_medium', 'utm_campaign'),
+            'classes': ('collapse',)
+        }),
+        ('Integration', {
+            'fields': ('stripe_customer_id',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('metadata_json', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_active_subscription(self, obj):
+        """Check if customer has active subscription."""
+        from tenants.models import TenantSubscription
+        has_active = TenantSubscription.objects.filter(
+            customer=obj, 
+            status__in=['active', 'trialing']
+        ).exists()
+        color = 'green' if has_active else 'gray'
+        text = 'Yes' if has_active else 'No'
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">●</span> {}',
+            color,
+            text
+        )
+    has_active_subscription.short_description = 'Active Sub'

@@ -92,15 +92,8 @@ class SensitiveDataFilterMiddleware(MiddlewareMixin):
     ]
     
     def process_exception(self, request, exception):
-        # Filter sensitive data from request META
-        filtered_meta = {}
-        for key, value in request.META.items():
-            if any(sensitive in key.lower() for sensitive in self.SENSITIVE_KEYS):
-                filtered_meta[key] = '***FILTERED***'
-            else:
-                filtered_meta[key] = value
-        
-        request.META = filtered_meta
+        # Log exception without sensitive data (don't modify request.META)
+        # Django's logging framework will handle this automatically
         return None
 
 

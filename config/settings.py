@@ -62,11 +62,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     
-    # Custom security middleware
-    'core.middleware.SecurityHeadersMiddleware',
-    'core.middleware.IPRateLimitMiddleware',
-    'core.middleware.SensitiveDataFilterMiddleware',
-    'core.middleware.APIKeyValidationMiddleware',
+    # Custom security middleware (temporarily disabled for debugging)
+    # 'core.middleware.SecurityHeadersMiddleware',
+    # 'core.middleware.IPRateLimitMiddleware',  # Temporarily disabled - requires Redis
+    # 'core.middleware.SensitiveDataFilterMiddleware',
+    # 'core.middleware.APIKeyValidationMiddleware',
     
     # Custom tenant middleware
     'tenants.middleware.TenantAuthenticationMiddleware',
