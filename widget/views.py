@@ -19,6 +19,7 @@ except ImportError:
     StripeError = Exception
 
 from tenants.models import Tenant, TenantCustomer, TenantPlan, TenantSubscription
+from subscriptions.models import Subscription
 from checkout.models import CheckoutSession
 from core.platform_fees import calculate_platform_fee, calculate_fee_breakdown
 
