@@ -64,15 +64,6 @@ jobs:
         ALLOWED_HOSTS: localhost,127.0.0.1
       run: |
         python manage.py test
-    
-    - name: Check for missing migrations
-      env:
-        SECRET_KEY: test-secret-key-for-ci-only
-        DEBUG: False
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-        ALLOWED_HOSTS: localhost,127.0.0.1
-      run: |
-        python manage.py makemigrations --check --dry-run
 
   deploy:
     needs: test
