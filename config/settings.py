@@ -99,7 +99,7 @@ import dj_database_url
 
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"postgresql://{env('DB_USER', default='postgres')}:{env('DB_PASSWORD', default='password')}@{env('DB_HOST', default='localhost')}:{env('DB_PORT', default='5432')}/{env('DB_NAME', default='billing_platform_db')}",
+        default=env('DATABASE_URL', default=f"postgresql://{env('DB_USER', default='postgres')}:{env('DB_PASSWORD', default='password')}@{env('DB_HOST', default='localhost')}:{env('DB_PORT', default='5432')}/{env('DB_NAME', default='billing_platform_db')}"),
         conn_max_age=600,
         conn_health_checks=True,
     )
