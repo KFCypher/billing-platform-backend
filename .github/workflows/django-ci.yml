@@ -43,6 +43,11 @@ jobs:
         SECRET_KEY: test-secret-key-for-ci-only
         DEBUG: False
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_NAME: test_db
         ALLOWED_HOSTS: localhost,127.0.0.1
       run: |
         python manage.py check
@@ -52,6 +57,11 @@ jobs:
         SECRET_KEY: test-secret-key-for-ci-only
         DEBUG: False
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_NAME: test_db
         ALLOWED_HOSTS: localhost,127.0.0.1
       run: |
         python manage.py migrate
@@ -61,6 +71,11 @@ jobs:
         SECRET_KEY: test-secret-key-for-ci-only
         DEBUG: False
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_NAME: test_db
         ALLOWED_HOSTS: localhost,127.0.0.1
       run: |
         python manage.py test
