@@ -200,8 +200,8 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
-# CORS Settings
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# CORS Settings - Temporarily allow all for debugging
+CORS_ALLOW_ALL_ORIGINS = True  # TODO: Change back to DEBUG after fixing Railway env vars
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:3000',
     'http://127.0.0.1:3000',
