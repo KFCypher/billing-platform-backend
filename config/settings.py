@@ -229,8 +229,6 @@ CORS_ALLOW_HEADERS = [
     'x-tenant-id',
 ]
 CORS_PREFLIGHT_MAX_AGE = 86400
-    'x-tenant-id',
-]
 
 # Celery Configuration
 CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
